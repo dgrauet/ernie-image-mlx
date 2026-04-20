@@ -1,0 +1,70 @@
+[project]
+name = "ernie-image-mlx"
+version = "0.1.0"
+description = "Pure MLX port of Baidu ERNIE-Image (8B text-to-image DiT) for Apple Silicon inference"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+authors = [{ name = "dgrauet" }]
+keywords = ["mlx", "text-to-image", "diffusion", "apple-silicon", "ernie", "baidu"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "ernie-image-core-mlx",
+]
+
+[project.optional-dependencies]
+parity = [
+    "torch>=2.3.0",
+    "diffusers>=0.36.0",
+    "transformers>=4.50.0",
+]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.7.0",
+]
+all = ["ernie-image-mlx[parity,dev]"]
+
+[project.urls]
+Homepage = "https://github.com/dgrauet/ernie-image-mlx"
+Repository = "https://github.com/dgrauet/ernie-image-mlx"
+Reference = "https://huggingface.co/baidu/ERNIE-Image"
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.uv.sources]
+ernie-image-core-mlx = { workspace = true }
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "N", "UP", "B", "SIM", "RUF"]
+ignore = [
+    "E501",   # line too long (formatter-managed)
+    "N806",   # tensor dim names (B, C, H, W, T, N)
+    "RUF005", # iterable unpacking vs concat
+    "SIM108", # ternary
+    "UP007",  # X | Y union (keep Optional for clarity)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["ernie_image_core_mlx"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "slow: tests that require model weights (deselect with '-m \"not slow\"')",
+    "parity: PyTorch vs MLX numerical parity tests (require [parity] extra)",
+]

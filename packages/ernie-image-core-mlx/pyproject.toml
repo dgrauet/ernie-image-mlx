@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ernie-image-core-mlx"
+version = "0.1.0"
+description = "ERNIE-Image (8B text-to-image DiT) core modules ported to MLX"
+readme = "../../README.md"
+license = "MIT"
+requires-python = ">=3.11"
+authors = [{ name = "dgrauet" }]
+keywords = ["mlx", "text-to-image", "diffusion", "apple-silicon", "ernie"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "mlx>=0.31.0",
+    "mlx-arsenal>=0.2.2",
+    "mlx-lm>=0.31.0",
+    "safetensors>=0.4.0",
+    "huggingface-hub>=0.26.0",
+    "numpy>=1.26.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ernie_image_core_mlx"]

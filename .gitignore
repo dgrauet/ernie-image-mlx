@@ -1,0 +1,27 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+build/
+dist/
+.venv/
+venv/
+
+# Local weights
+weights/
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+
+# Editor
+.vscode/
+.idea/
+.DS_Store
+*.swp
+
+# Test outputs
+tests/**/outputs/
+tests/**/*.png
