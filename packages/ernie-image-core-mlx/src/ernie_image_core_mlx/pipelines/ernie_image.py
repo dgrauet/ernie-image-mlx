@@ -14,8 +14,10 @@ ernie-image` recipe):
     text_encoder_config.json       — Mistral3 config (text_config + vision_config)
     scheduler_scheduler_config.json — flow-match scheduler params
 
-The Prompt Enhancer (`Ministral3ForCausalLM` → `pe/` subfolder) is skipped in
-v0. Pass a pre-expanded prompt for best results.
+The Prompt Enhancer (3B `Ministral3ForCausalLM`) lives in its own repo
+(`dgrauet/ernie-image-pe-mlx-q4` by default — int4, ~1.8 GB, shared across
+Turbo and SFT). Pass `pe_repo_id=None` to skip loading, or `use_pe=False` to
+the call to bypass expansion on a per-call basis.
 """
 
 from __future__ import annotations
@@ -40,12 +42,14 @@ from ernie_image_core_mlx.model.config import (
 )
 from ernie_image_core_mlx.model.transformer import ErnieImageTransformer2DModel
 from ernie_image_core_mlx.model.vae import AutoencoderKLFlux2
+from ernie_image_core_mlx.prompt_enhancer import DEFAULT_PE_REPO_ID, PromptEnhancer
 from ernie_image_core_mlx.text_encoders.mistral3 import Mistral3TextEncoder
 
 
 @dataclass
 class PipelineOutput:
     images: list  # list[PIL.Image.Image]; typed loosely to avoid a hard Pillow dep
+    revised_prompts: list[str] | None = None  # populated when PE ran, None otherwise
 
 
 # ---------------------------------------------------------------------------
@@ -181,6 +185,7 @@ class ErnieImagePipeline:
         *,
         tokenizer=None,
         weights_dir: Path | None = None,
+        prompt_enhancer: PromptEnhancer | None = None,
     ):
         self.transformer = transformer
         self.vae = vae
@@ -189,6 +194,7 @@ class ErnieImagePipeline:
         self.config = config
         self.tokenizer = tokenizer
         self.weights_dir = weights_dir
+        self.prompt_enhancer = prompt_enhancer
 
     # ------------------------------------------------------------------
     # Construction
@@ -201,7 +207,16 @@ class ErnieImagePipeline:
         *,
         variant: str | None = None,
         local_dir: str | None = None,
+        pe_repo_id: str | None = DEFAULT_PE_REPO_ID,
+        pe_local_dir: str | None = None,
     ) -> ErnieImagePipeline:
+        """Load the image pipeline.
+
+        The Prompt Enhancer lives in a separate repo (default
+        ``dgrauet/ernie-image-pe-mlx-q4``) — it is shared across Turbo/SFT and
+        decoupled to avoid duplicating a 7 GB model across every image variant.
+        Pass ``pe_repo_id=None`` to skip loading the PE entirely.
+        """
         variant = variant or ("turbo" if "turbo" in repo_id.lower() else "sft")
         weights_dir = resolve_weights_dir(repo_id=repo_id, local_dir=local_dir)
 
@@ -296,6 +311,16 @@ class ErnieImagePipeline:
 
         tokenizer = cls._try_load_tokenizer(weights_dir)
 
+        prompt_enhancer: PromptEnhancer | None = None
+        if pe_repo_id is not None:
+            try:
+                prompt_enhancer = PromptEnhancer.from_pretrained(repo_id=pe_repo_id, local_dir=pe_local_dir)
+            except Exception as exc:
+                # PE is optional — a missing repo / checkpoint shouldn't kill
+                # pipeline loading. Surface the failure so the user can fix it
+                # if they wanted PE on.
+                print(f"[warn] Prompt Enhancer not loaded from {pe_repo_id!r}: {exc}")
+
         return cls(
             transformer=transformer,
             vae=vae,
@@ -304,6 +329,7 @@ class ErnieImagePipeline:
             config=pipe_cfg,
             tokenizer=tokenizer,
             weights_dir=weights_dir,
+            prompt_enhancer=prompt_enhancer,
         )
 
     @staticmethod
@@ -395,6 +421,11 @@ class ErnieImagePipeline:
         guidance_scale: float | None = None,
         negative_prompt: str | None = "",
         seed: int | None = None,
+        use_pe: bool = True,
+        pe_temperature: float = 0.6,
+        pe_top_p: float = 0.95,
+        pe_max_new_tokens: int = 2048,
+        pe_seed: int | None = None,
     ) -> PipelineOutput:
         cfg = self.config
         tf_cfg: ErnieImageConfig = self.transformer.cfg
@@ -403,6 +434,26 @@ class ErnieImagePipeline:
         steps = num_inference_steps or cfg.num_inference_steps
         cfg_scale = guidance_scale if guidance_scale is not None else cfg.guidance_scale
         use_cfg = cfg_scale > 1.0 and negative_prompt is not None
+
+        # Normalize to a list up-front so PE can apply per-prompt before encoding.
+        if isinstance(prompt, str):
+            prompt = [prompt]
+
+        revised_prompts: list[str] | None = None
+        if use_pe and self.prompt_enhancer is not None:
+            revised_prompts = [
+                self.prompt_enhancer.enhance(
+                    p,
+                    width=width,
+                    height=height,
+                    temperature=pe_temperature,
+                    top_p=pe_top_p,
+                    max_new_tokens=pe_max_new_tokens,
+                    seed=pe_seed,
+                )
+                for p in prompt
+            ]
+            prompt = revised_prompts
 
         cond_hidden, cond_lens, uncond_hidden, uncond_lens = self._encode_prompts(
             prompt, negative_prompt if use_cfg else None
@@ -483,4 +534,4 @@ class ErnieImagePipeline:
 
         image_chfirst = image.transpose(0, 3, 1, 2)
         pil_images = [_tensor_to_pil_image(image_chfirst[i]) for i in range(B)]
-        return PipelineOutput(images=pil_images)
+        return PipelineOutput(images=pil_images, revised_prompts=revised_prompts)

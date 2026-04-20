@@ -41,8 +41,16 @@ The first six were caught by the three-test diagnostic in the mlx-porting skill'
 
 ## Remaining optional work
 
-- **Prompt Enhancer** (`pe/` subfolder) — a 3B `Ministral3ForCausalLM` that expands short user prompts. The reference enables it by default (`use_pe=True`). Without it, short English prompts are out-of-distribution for the DiT; long/Chinese prompts work fine. Port would re-use the existing `text_encoders/mistral3.py` wrapper pointing at the `pe/` weights with a sampling loop on top.
 - **Upstream diffusers** — `ErnieImageTransformer2DModel` landed on diffusers `main` but isn't in a numbered release yet. When it ships, replace the vendored `tests/parity/_pt_reference.py` classes with the upstream import.
+
+## Prompt Enhancer — done
+
+- Wrapper: `prompt_enhancer.py` → delegates to `mlx_lm.models.ministral3.Model` (the full Ministral3ForCausalLM; same 26-layer backbone as the text encoder + tied lm_head). Chat template + JSON-wrapped payload + `mlx_lm.generate_step` with `temperature=0.6, top_p=0.95, max_new_tokens=2048` — matches diffusers verbatim.
+- Recipe: separate `mlx-forge convert ernie-image-pe` (not bundled with image variants — PE is identical across Turbo/SFT so hosting once as `dgrauet/ernie-image-pe-mlx[-q4]` avoids ~7 GB duplication per image repo).
+- Quantization: int4 via `--quantize --bits 4` → ~1.8 GB (from 7 GB fp16). Quantizes both block Linears AND `embed_tokens` (MLX's `QuantizedEmbedding.as_linear` handles the tied lm_head path natively). Skipping `embed_tokens` would leave ~768 MB of unquantized vocab table on disk.
+- Recipe drops the redundant `lm_head.weight` at conversion time (`tie_word_embeddings=true` → mlx-lm's sanitize drops it at load, but dropping on disk saves ~768 MB fp16).
+- Pipeline integration: `ErnieImagePipeline.from_pretrained(..., pe_repo_id="dgrauet/ernie-image-pe-mlx-q4")`, runtime `pipe(..., use_pe=True)`. `PipelineOutput.revised_prompts` exposes the expansion so CLI can print it.
+- CLI: `--no-pe`, `--pe-repo-id`, `--pe-local-dir`, `--pe-seed`. Revised prompt printed to stdout when PE ran.
 
 ## Configs (oracle — do not deviate)
 

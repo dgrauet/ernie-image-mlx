@@ -38,15 +38,21 @@ from ernie_image_core_mlx import ErnieImagePipeline
 
 pipe = ErnieImagePipeline.from_pretrained("baidu/ERNIE-Image-Turbo")
 out = pipe(
-    "一只黑白相间的中华田园犬",            # Chinese prompts work best — the reference Prompt Enhancer
-    height=512, width=512,                # expands user input during training; raw English prompts
-    num_inference_steps=8,                # will be interpreted but are out-of-distribution
-    guidance_scale=1.0,                   # turbo is CFG-distilled; use 4-5 with the SFT variant
+    "a black and white chinese farm dog",  # any language works — PE expands short inputs
+    height=512, width=512,                 # into rich Chinese visual descriptions
+    num_inference_steps=8,                 # turbo is distilled; SFT wants 50 steps
+    guidance_scale=1.0,                    # turbo is CFG-distilled; use 4-5 with the SFT variant
     negative_prompt=None,
     seed=42,
 )
+print(out.revised_prompts[0])             # the PE-expanded prompt fed to the DiT
 out.images[0].save("dog.png")
 ```
+
+`from_pretrained` also loads the Prompt Enhancer from a separate HF repo by
+default (`dgrauet/ernie-image-pe-mlx-q4`, ~1.8 GB). Set `pe_repo_id=None` to
+skip loading it entirely, or pass `use_pe=False` to the call to keep it loaded
+but bypass expansion on a per-call basis.
 
 `from_pretrained` resolution order: explicit `local_dir` → `ERNIE_IMAGE_MLX_WEIGHTS_DIR` env var → `huggingface_hub.snapshot_download(repo_id)` (only useful once an MLX build is uploaded to HF).
 
@@ -63,9 +69,15 @@ ernie-image-mlx generate -p "prompt" \
 
 # Use a locally-converted checkpoint (mlx-forge convert ernie-image …)
 ernie-image-mlx generate -p "prompt" --local-dir ~/models/ernie-image-turbo-mlx-q8
+
+# Skip the Prompt Enhancer (save ~3 s + ~1.8 GB RAM — useful when the prompt
+# is already a detailed Chinese description)
+ernie-image-mlx generate -p "一只详细描述..." --no-pe
 ```
 
 Defaults match the `ErnieImagePipeline`: 1024×1024, variant auto-detected from `--repo-id`, CFG implicitly disabled for Turbo (`guidance=1.0`). Pass `--no-cfg` to skip the uncond pass explicitly, or `--variant {turbo,sft}` to override detection when loading from `--local-dir`. Pass `--seed -1` to draw (and print) a fresh random seed — the integer is echoed to stdout so you can rerun with the exact value for reproducibility.
+
+The Prompt Enhancer is on by default and loads from `dgrauet/ernie-image-pe-mlx-q4`. Override with `--pe-repo-id`, point at a local converted dir with `--pe-local-dir`, or disable entirely with `--no-pe`. `--pe-seed` controls PE sampling reproducibility independently of `--seed` (which controls the image latent).
 
 ## Convert weights
 
@@ -80,9 +92,13 @@ mlx-forge convert ernie-image --variant turbo --quantize --bits 8
 mlx-forge convert ernie-image --variant sft --quantize --bits 4
 # Validate
 mlx-forge validate ernie-image models/ernie-image-turbo-mlx
+
+# Prompt Enhancer (separate recipe, same tool — 7 GB fp16 or 1.8 GB int4)
+mlx-forge convert ernie-image-pe --quantize --bits 4
+mlx-forge validate ernie-image-pe models/ernie-image-pe-mlx-q4
 ```
 
-Output shape: split per-component safetensors (`transformer.safetensors`, `text_encoder.safetensors`, `vae.safetensors`) plus `transformer_config.json`, `vae_config.json`, `text_encoder_config.json`, and the [`mistral-community/pixtral-12b`](https://huggingface.co/mistral-community/pixtral-12b) tokenizer files bundled automatically (Baidu publishes only `tokenizer_config.json`, the vocabulary itself is pulled from the upstream Pixtral repo).
+Output shape: split per-component safetensors (`transformer.safetensors`, `text_encoder.safetensors`, `vae.safetensors`) plus `transformer_config.json`, `vae_config.json`, `text_encoder_config.json`, and the [`mistral-community/pixtral-12b`](https://huggingface.co/mistral-community/pixtral-12b) tokenizer files bundled automatically (Baidu publishes only `tokenizer_config.json`, the vocabulary itself is pulled from the upstream Pixtral repo). The PE recipe produces a standalone `pe.safetensors` + chat-template + tokenizer directory, ready to be uploaded as a sibling repo shared across Turbo and SFT.
 
 ## Architecture
 
@@ -94,7 +110,7 @@ Extracted from `model_index.json` + per-component `config.json`:
 | VAE | `AutoencoderKLFlux2` | 4 down/up blocks `[128, 256, 512, 512]`, latent 32 ch, patch 2×2, GroupNorm, SiLU; top-level `BatchNorm2d` for latent renormalisation |
 | Text encoder | `Mistral3Model` (text path) | Ministral3 backbone: 26 layers, hidden 3072, 32 heads / 8 KV heads (GQA), head_dim 128, YaRN RoPE |
 | Scheduler | `FlowMatchEulerDiscreteScheduler` | `mlx_arsenal.diffusion`, linear sigma schedule `linspace(1, 0, N+1)[:-1]` |
-| Prompt Enhancer | `Ministral3ForCausalLM` | **Skipped in v0** — pass a pre-enhanced prompt for best results |
+| Prompt Enhancer | `Ministral3ForCausalLM` | 3B CausalLM, 26-layer Ministral3 (shares backbone with text encoder) + tied lm_head; expands user prompts via Chinese chat template — int4 default (~1.8 GB) |
 
 ## Development
 

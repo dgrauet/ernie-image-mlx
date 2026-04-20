@@ -10,7 +10,13 @@ from __future__ import annotations
 import pytest
 
 from ernie_image_core_mlx import __version__
-from ernie_image_core_mlx.cli import DEFAULT_REPO_ID, _build_parser, _resolve_seed, main
+from ernie_image_core_mlx.cli import (
+    DEFAULT_PE_REPO_ID,
+    DEFAULT_REPO_ID,
+    _build_parser,
+    _resolve_seed,
+    main,
+)
 
 
 def test_help_exits_cleanly():
@@ -49,6 +55,29 @@ def test_parser_defaults_are_turbo_q8():
     assert DEFAULT_REPO_ID == "dgrauet/ernie-image-turbo-mlx-q8"
     assert args.height == 1024 and args.width == 1024
     assert args.steps is None and args.guidance is None  # let pipeline pick per variant
+
+
+def test_parser_default_pe_is_q4():
+    """PE is enabled by default and pulled from the dedicated int4 repo — the 3B
+    CausalLM is fine at int4 (~1.8 GB) so we default there to keep the total
+    footprint manageable on 24 GB Macs when combined with an int8 DiT."""
+    parser = _build_parser()
+    args = parser.parse_args(["generate", "-p", "hi"])
+    assert args.no_pe is False
+    assert args.pe_repo_id == DEFAULT_PE_REPO_ID == "dgrauet/ernie-image-pe-mlx-q4"
+
+
+def test_parser_no_pe_toggle():
+    parser = _build_parser()
+    args = parser.parse_args(["generate", "-p", "hi", "--no-pe"])
+    assert args.no_pe is True
+
+
+def test_parser_pe_local_dir_override():
+    parser = _build_parser()
+    args = parser.parse_args(["generate", "-p", "hi", "--pe-local-dir", "/tmp/pe", "--pe-repo-id", "foo/bar"])
+    assert args.pe_local_dir == "/tmp/pe"
+    assert args.pe_repo_id == "foo/bar"
 
 
 def test_resolve_seed_passthrough():

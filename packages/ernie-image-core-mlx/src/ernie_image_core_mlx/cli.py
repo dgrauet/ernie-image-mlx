@@ -12,6 +12,7 @@ import time
 from pathlib import Path
 
 DEFAULT_REPO_ID = "dgrauet/ernie-image-turbo-mlx-q8"
+DEFAULT_PE_REPO_ID = "dgrauet/ernie-image-pe-mlx-q4"
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -30,8 +31,8 @@ def _build_parser() -> argparse.ArgumentParser:
         "--prompt",
         required=True,
         help=(
-            "Text prompt. Chinese prompts are strongly recommended — the reference "
-            "Prompt Enhancer is not ported, so short English inputs are out-of-distribution."
+            "Text prompt. Any language works; the Prompt Enhancer expands it into a "
+            "rich Chinese visual description before the text encoder (disable with --no-pe)."
         ),
     )
     gen.add_argument(
@@ -88,6 +89,30 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Seed for reproducibility. Pass -1 to draw a random seed (printed so you can reuse it).",
     )
+    gen.add_argument(
+        "--no-pe",
+        action="store_true",
+        help="Disable the Prompt Enhancer (skip loading and skip prompt expansion).",
+    )
+    gen.add_argument(
+        "--pe-repo-id",
+        default=DEFAULT_PE_REPO_ID,
+        help=f"HF repo id for the Prompt Enhancer MLX weights (default: {DEFAULT_PE_REPO_ID}).",
+    )
+    gen.add_argument(
+        "--pe-local-dir",
+        default=None,
+        help="Already-converted PE weights dir. Overrides --pe-repo-id.",
+    )
+    gen.add_argument(
+        "--pe-seed",
+        type=int,
+        default=None,
+        help=(
+            "Seed for PE sampling (separate from image seed). "
+            "Pass -1 to draw random. Defaults to non-deterministic sampling to match diffusers."
+        ),
+    )
     return p
 
 
@@ -109,14 +134,19 @@ def _resolve_seed(raw: int | None) -> int | None:
 def _run_generate(args: argparse.Namespace) -> int:
     from ernie_image_core_mlx import ErnieImagePipeline
 
+    # `--no-pe` sets `pe_repo_id=None` which tells the pipeline to skip the
+    # Prompt Enhancer load entirely (saves ~3 s and 4 GB of RAM).
     pipe = ErnieImagePipeline.from_pretrained(
         args.repo_id,
         variant=args.variant,
         local_dir=args.local_dir,
+        pe_repo_id=None if args.no_pe else args.pe_repo_id,
+        pe_local_dir=args.pe_local_dir,
     )
 
     negative = None if args.no_cfg else args.negative_prompt
     seed = _resolve_seed(args.seed)
+    pe_seed = _resolve_seed(args.pe_seed) if args.pe_seed is not None else None
     t0 = time.perf_counter()
     out = pipe(
         args.prompt,
@@ -126,8 +156,15 @@ def _run_generate(args: argparse.Namespace) -> int:
         guidance_scale=args.guidance,
         negative_prompt=negative,
         seed=seed,
+        use_pe=not args.no_pe,
+        pe_seed=pe_seed,
     )
     elapsed = time.perf_counter() - t0
+
+    if out.revised_prompts:
+        print("Revised prompt:")
+        for p in out.revised_prompts:
+            print(f"  {p}")
 
     out_path = Path(args.output).expanduser()
     if out_path.parent and not out_path.parent.exists():
