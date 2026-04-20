@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ernie-image-core-mlx"
-version = "0.1.0"
+version = "0.2.0"
 description = "ERNIE-Image (8B text-to-image DiT) core modules ported to MLX"
 readme = "../../README.md"
 license = "MIT"
@@ -29,7 +29,12 @@ dependencies = [
     "safetensors>=0.4.0",
     "huggingface-hub>=0.26.0",
     "numpy>=1.26.0",
+    "pillow>=10.0.0",
+    "transformers>=4.50.0",
 ]
+
+[project.scripts]
+ernie-image-mlx = "ernie_image_core_mlx.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/ernie_image_core_mlx"]

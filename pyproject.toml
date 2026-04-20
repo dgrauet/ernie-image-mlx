@@ -1,6 +1,6 @@
 [project]
 name = "ernie-image-mlx"
-version = "0.1.0"
+version = "0.2.0"
 description = "Pure MLX port of Baidu ERNIE-Image (8B text-to-image DiT) for Apple Silicon inference"
 readme = "README.md"
 license = "MIT"

@@ -48,6 +48,23 @@ out.images[0].save("dog.png")
 
 `from_pretrained` resolution order: explicit `local_dir` → `ERNIE_IMAGE_MLX_WEIGHTS_DIR` env var → `huggingface_hub.snapshot_download(repo_id)` (only useful once an MLX build is uploaded to HF).
 
+## CLI
+
+`pip install -e .` (or `uv sync`) exposes a terminal entrypoint. Weights download on first use from `dgrauet/ernie-image-turbo-mlx-q8` (12 GB, int8 Turbo — the "ideal balance" row below):
+
+```bash
+ernie-image-mlx generate -p "一只黑白相间的中华田园犬" -o dog.png
+
+# SFT variant at 50 steps with guidance 5
+ernie-image-mlx generate -p "prompt" \
+    --repo-id dgrauet/ernie-image-sft-mlx-q8 -s 50 -g 5.0 --seed 42
+
+# Use a locally-converted checkpoint (mlx-forge convert ernie-image …)
+ernie-image-mlx generate -p "prompt" --local-dir ~/models/ernie-image-turbo-mlx-q8
+```
+
+Defaults match the `ErnieImagePipeline`: 1024×1024, variant auto-detected from `--repo-id`, CFG implicitly disabled for Turbo (`guidance=1.0`). Pass `--no-cfg` to skip the uncond pass explicitly, or `--variant {turbo,sft}` to override detection when loading from `--local-dir`. Pass `--seed -1` to draw (and print) a fresh random seed — the integer is echoed to stdout so you can rerun with the exact value for reproducibility.
+
 ## Convert weights
 
 MLX-native safetensors ship via the sibling [`mlx-forge`](https://github.com/dgrauet/mlx-forge) CLI:
