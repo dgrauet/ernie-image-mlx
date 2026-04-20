@@ -1,5 +1,7 @@
 # ernie-image-mlx
 
+[![CI](https://github.com/dgrauet/ernie-image-mlx/actions/workflows/ci.yml/badge.svg)](https://github.com/dgrauet/ernie-image-mlx/actions/workflows/ci.yml)
+
 Pure [MLX](https://github.com/ml-explore/mlx) port of Baidu [ERNIE-Image](https://huggingface.co/baidu/ERNIE-Image) — an 8B single-stream Diffusion Transformer for text-to-image generation on Apple Silicon.
 
 > **Status:** Runnable end-to-end. All MLX modules parity-tested against diffusers (fp32 — DiT 3.1e-6, VAE encoder 1.7e-6, VAE decoder 6.7e-6, ResnetBlock2D 1e-5). Six checkpoint variants converted (fp16 / int8 / int4 × SFT / Turbo) and verified to produce clean images. The sample below was rendered by Turbo-q fp16 in 45 s on an M-series Mac with the prompt `一只黑白相间的中华田园犬` ("a black and white Chinese village dog"):
@@ -102,6 +104,9 @@ uv run pytest tests/smoke
 
 # Full parity suite (needs the [parity] extra; ~5 s total — all random-weight)
 uv run pytest tests/parity -m parity
+
+# Optional: install the pre-commit hook so ruff runs on every `git commit`.
+uv run pre-commit install
 ```
 
 23 tests pass. Parity coverage: RoPE embedder, `apply_rotary_emb`, single-head and multi-head attention, FFN (GeGLU), shared-AdaLN block, AdaLN-continuous, full 2-layer DiT, ResnetBlock2D, VAE self-attention, full VAE encoder, full VAE decoder. Thresholds: < 1e-5 for layers, < 5e-3 for the full block, < 1e-4 for the small-config full model.
