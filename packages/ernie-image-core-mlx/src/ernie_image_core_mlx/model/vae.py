@@ -46,9 +46,7 @@ class ResnetBlock2D(nn.Module):
         self.norm2 = nn.GroupNorm(groups, out_channels, pytorch_compatible=True, eps=eps)
         self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1)
         self.conv_shortcut = (
-            nn.Conv2d(in_channels, out_channels, kernel_size=1)
-            if in_channels != out_channels
-            else None
+            nn.Conv2d(in_channels, out_channels, kernel_size=1) if in_channels != out_channels else None
         )
 
     def __call__(self, x: mx.array) -> mx.array:
@@ -212,13 +210,11 @@ class VAEMidBlock(nn.Module):
             ResnetBlock2D(channels, channels, groups=groups, eps=eps),
             ResnetBlock2D(channels, channels, groups=groups, eps=eps),
         ]
-        self.attentions = (
-            [VAEAttention(channels, groups=groups, eps=eps)] if add_attention else []
-        )
+        self.attentions = [VAEAttention(channels, groups=groups, eps=eps)] if add_attention else []
 
     def __call__(self, x: mx.array) -> mx.array:
         x = self.resnets[0](x)
-        for attn, resnet in zip(self.attentions, self.resnets[1:]):
+        for attn, resnet in zip(self.attentions, self.resnets[1:], strict=True):
             x = attn(x)
             x = resnet(x)
         if not self.attentions:
@@ -255,9 +251,7 @@ class Encoder(nn.Module):
             )
             c_prev = c_out
 
-        self.mid_block = VAEMidBlock(
-            c_prev, groups=cfg.norm_num_groups, add_attention=cfg.mid_block_add_attention
-        )
+        self.mid_block = VAEMidBlock(c_prev, groups=cfg.norm_num_groups, add_attention=cfg.mid_block_add_attention)
 
         self.conv_norm_out = nn.GroupNorm(cfg.norm_num_groups, c_prev, pytorch_compatible=True, eps=1e-6)
         out_ch = 2 * cfg.latent_channels if double_z else cfg.latent_channels
@@ -281,9 +275,7 @@ class Decoder(nn.Module):
         c_top = cfg.block_out_channels[-1]
         self.conv_in = nn.Conv2d(cfg.latent_channels, c_top, kernel_size=3, padding=1)
 
-        self.mid_block = VAEMidBlock(
-            c_top, groups=cfg.norm_num_groups, add_attention=cfg.mid_block_add_attention
-        )
+        self.mid_block = VAEMidBlock(c_top, groups=cfg.norm_num_groups, add_attention=cfg.mid_block_add_attention)
 
         # Decoder iterates the reversed channel list; diffusers uses `layers_per_block + 1`
         # resnets per up-block (one more than the encoder).
@@ -374,14 +366,10 @@ class AutoencoderKLFlux2(nn.Module):
         self.encoder = Encoder(cfg, double_z=True)
         self.decoder = Decoder(cfg)
         self.quant_conv = (
-            nn.Conv2d(2 * cfg.latent_channels, 2 * cfg.latent_channels, kernel_size=1)
-            if cfg.use_quant_conv
-            else None
+            nn.Conv2d(2 * cfg.latent_channels, 2 * cfg.latent_channels, kernel_size=1) if cfg.use_quant_conv else None
         )
         self.post_quant_conv = (
-            nn.Conv2d(cfg.latent_channels, cfg.latent_channels, kernel_size=1)
-            if cfg.use_post_quant_conv
-            else None
+            nn.Conv2d(cfg.latent_channels, cfg.latent_channels, kernel_size=1) if cfg.use_post_quant_conv else None
         )
 
         # Latent normalization stats (`bn.*` keys in the reference checkpoint).

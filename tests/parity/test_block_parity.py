@@ -25,10 +25,11 @@ def _update_mx(mx_module, flat: list[tuple[str, object]]) -> None:
     import mlx.utils as mx_utils
 
     mx_module.update(mx_utils.tree_unflatten(flat))
-    mx.eval( mx_module.parameters() )
+    mx.eval(mx_module.parameters())
 
 
 # ---------------------------------------------------------------------------
+
 
 def test_ffn_parity():
     import mlx.core as mx
@@ -58,6 +59,7 @@ def test_ffn_parity():
 
 
 # ---------------------------------------------------------------------------
+
 
 def test_adaln_continuous_parity():
     import mlx.core as mx
@@ -101,6 +103,7 @@ def test_adaln_continuous_parity():
 
 # ---------------------------------------------------------------------------
 
+
 def _pt_to_mx_block_rename(key: str) -> str:
     return key.replace("self_attention.to_out.0.weight", "self_attention.to_out_0.weight")
 
@@ -113,6 +116,8 @@ def test_shared_adaln_block_parity():
     from ernie_image_core_mlx.model.transformer import ErnieImageSharedAdaLNBlock as MxBlock
     from tests.parity._pt_reference import (
         ErnieImageEmbedND3 as PtEmbed,
+    )
+    from tests.parity._pt_reference import (
         ErnieImageSharedAdaLNBlock as PtBlock,
     )
 
@@ -139,10 +144,7 @@ def test_shared_adaln_block_parity():
     mxm = MxBlock(cfg)
 
     pt_sd = _copy_pt_state(pt)
-    flat = [
-        (_pt_to_mx_block_rename(k), mx.array(v))
-        for k, v in pt_sd.items()
-    ]
+    flat = [(_pt_to_mx_block_rename(k), mx.array(v)) for k, v in pt_sd.items()]
     _update_mx(mxm, flat)
 
     B, S = 2, 48
@@ -151,21 +153,13 @@ def test_shared_adaln_block_parity():
     ids_np = rng.integers(0, 32, size=(B, S, 3)).astype(np.float32)
 
     pt_embed = PtEmbed(dim=cfg.head_dim, theta=cfg.rope_theta, axes_dim=cfg.rope_axes_dim)
-    mx_embed = ErnieImageEmbedND3(
-        head_dim=cfg.head_dim, theta=cfg.rope_theta, axes_dim=cfg.rope_axes_dim
-    )
+    mx_embed = ErnieImageEmbedND3(head_dim=cfg.head_dim, theta=cfg.rope_theta, axes_dim=cfg.rope_axes_dim)
     pt_freqs = pt_embed(torch.from_numpy(ids_np))
     mx_freqs = mx_embed(mx.array(ids_np))
 
     # temb — 6-tuple. PT expects [S, B, H]; MLX block expects broadcastable [B, 1, H].
-    temb_vals = [
-        rng.standard_normal((B, cfg.hidden_size)).astype(np.float32)
-        for _ in range(6)
-    ]
-    pt_temb = [
-        torch.from_numpy(v).unsqueeze(0).expand(S, -1, -1).contiguous()
-        for v in temb_vals
-    ]
+    temb_vals = [rng.standard_normal((B, cfg.hidden_size)).astype(np.float32) for _ in range(6)]
+    pt_temb = [torch.from_numpy(v).unsqueeze(0).expand(S, -1, -1).contiguous() for v in temb_vals]
     mx_temb = tuple(mx.array(v)[:, None, :] for v in temb_vals)
 
     with torch.no_grad():
@@ -184,6 +178,4 @@ def test_shared_adaln_block_parity():
     max_abs = float(diff.max())
     mean_abs = float(diff.mean())
     # AdaLN + FFN compound on top of attention — looser threshold than pure attention.
-    assert max_abs < 5e-3, (
-        f"block parity FAIL: max_abs={max_abs:.3e} mean_abs={mean_abs:.3e}"
-    )
+    assert max_abs < 5e-3, f"block parity FAIL: max_abs={max_abs:.3e} mean_abs={mean_abs:.3e}"

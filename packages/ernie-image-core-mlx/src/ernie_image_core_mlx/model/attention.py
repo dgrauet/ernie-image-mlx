@@ -72,9 +72,7 @@ class ErnieAttention(nn.Module):
         v = v.transpose(0, 2, 1, 3)
 
         scale = 1.0 / (D**0.5)
-        out = mx.fast.scaled_dot_product_attention(
-            q, k, v, scale=scale, mask=attention_mask
-        )
+        out = mx.fast.scaled_dot_product_attention(q, k, v, scale=scale, mask=attention_mask)
         # back to (B, N, H*D)
         out = out.transpose(0, 2, 1, 3).reshape(B, N, H * D)
         return self.to_out_0(out)

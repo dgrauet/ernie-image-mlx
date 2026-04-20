@@ -13,8 +13,6 @@ language-model stack (post final RMSNorm, pre lm_head).
 
 from __future__ import annotations
 
-from dataclasses import asdict
-
 import mlx.core as mx
 import mlx.nn as nn
 
@@ -102,7 +100,7 @@ class Mistral3TextEncoder(nn.Module):
         ).astype(h.dtype)
 
         # Apply the first N-1 layers; stop before the last one to match hs[-2].
-        for layer, c in zip(lm.layers[:-1], cache[:-1]):
+        for layer, c in zip(lm.layers[:-1], cache[:-1], strict=True):
             mask = swa_mask if layer.use_sliding else fa_mask
             h = layer(h, attn_scale, mask, cache=c)
 

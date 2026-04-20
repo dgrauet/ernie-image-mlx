@@ -48,12 +48,18 @@ ernie-image-core-mlx = { workspace = true }
 [tool.ruff]
 line-length = 120
 target-version = "py311"
+# Vendored from diffusers main (Apache 2.0) — kept verbatim so we can diff
+# against the upstream when `ErnieImageTransformer2DModel` ships in a release.
+extend-exclude = ["tests/parity/_pt_reference.py"]
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "N", "UP", "B", "SIM", "RUF"]
 ignore = [
     "E501",   # line too long (formatter-managed)
     "N806",   # tensor dim names (B, C, H, W, T, N)
+    "RUF001", # ambiguous chars — we intentionally use × and → in identifiers
+    "RUF002", # ambiguous chars in docstrings — math notation (3×3 conv, ×16 downsample)
+    "RUF003", # ambiguous chars in comments — same reason
     "RUF005", # iterable unpacking vs concat
     "SIM108", # ternary
     "UP007",  # X | Y union (keep Optional for clarity)
@@ -61,6 +67,7 @@ ignore = [
 
 [tool.ruff.lint.isort]
 known-first-party = ["ernie_image_core_mlx"]
+
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

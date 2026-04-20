@@ -66,7 +66,6 @@ def _translate_state(pt_state: dict) -> list[tuple[str, np.ndarray]]:
 
 def test_resnet_block_parity():
     import mlx.core as mx
-
     from diffusers.models.resnet import ResnetBlock2D as PtResnet
 
     from ernie_image_core_mlx.model.vae import ResnetBlock2D as MxResnet
@@ -108,7 +107,6 @@ def test_resnet_block_parity():
 
 def test_vae_attention_parity():
     import mlx.core as mx
-
     from diffusers.models.attention_processor import Attention, AttnProcessor
 
     from ernie_image_core_mlx.model.vae import VAEAttention
@@ -155,7 +153,6 @@ def test_vae_attention_parity():
 
 def test_encoder_parity():
     import mlx.core as mx
-
     from diffusers.models.autoencoders.vae import Encoder as PtEncoder
 
     from ernie_image_core_mlx.model.config import ErnieImageVaeConfig
@@ -200,7 +197,6 @@ def test_encoder_parity():
 
 def test_decoder_parity():
     import mlx.core as mx
-
     from diffusers.models.autoencoders.vae import Decoder as PtDecoder
 
     from ernie_image_core_mlx.model.config import ErnieImageVaeConfig

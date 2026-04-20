@@ -34,9 +34,7 @@ def resolve_weights_dir(
     if env_dir:
         p = Path(env_dir).expanduser().resolve()
         if not p.exists():
-            raise FileNotFoundError(
-                f"{ERNIE_IMAGE_MLX_WEIGHTS_DIR_ENV}={env_dir} does not exist"
-            )
+            raise FileNotFoundError(f"{ERNIE_IMAGE_MLX_WEIGHTS_DIR_ENV}={env_dir} does not exist")
         return p
 
     from huggingface_hub import snapshot_download

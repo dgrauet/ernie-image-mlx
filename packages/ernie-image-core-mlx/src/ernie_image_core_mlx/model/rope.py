@@ -58,15 +58,10 @@ class ErnieImageEmbedND3(nn.Module):
         self.head_dim = head_dim
         self.theta = theta
         self.axes_dim = tuple(axes_dim)
-        assert sum(self.axes_dim) == head_dim, (
-            f"axes_dim {self.axes_dim} must sum to head_dim {head_dim}"
-        )
+        assert sum(self.axes_dim) == head_dim, f"axes_dim {self.axes_dim} must sum to head_dim {head_dim}"
 
     def __call__(self, ids: mx.array) -> mx.array:
-        per_axis = [
-            _axis_angles(ids[..., i], self.axes_dim[i], self.theta)
-            for i in range(3)
-        ]
+        per_axis = [_axis_angles(ids[..., i], self.axes_dim[i], self.theta) for i in range(3)]
         emb = mx.concatenate(per_axis, axis=-1)  # [B, N, head_dim/2]
         emb = emb[:, :, None, :]  # [B, N, 1, head_dim/2]
         # Duplicate each angle along the last dim: [θ0,θ0,θ1,θ1,...].

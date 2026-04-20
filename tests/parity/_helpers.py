@@ -15,7 +15,7 @@ forcing lazy graphs to compute. Use it before any numpy conversion or
 
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 import numpy as np
 
@@ -23,6 +23,7 @@ import numpy as np
 def _materialize(*tensors) -> None:
     """Force MLX lazy tensors to compute. Wraps mx.eval."""
     import mlx.core as mx
+
     mx.eval(*tensors)
 
 
@@ -39,6 +40,7 @@ def make_seeded_input(shape: tuple[int, ...], seed: int = 42, dtype=np.float32) 
 def pt_to_mx(val):
     """Convert a PyTorch tensor to an MLX array via numpy (safe, always works)."""
     import mlx.core as mx
+
     return mx.array(val.detach().cpu().float().numpy())
 
 
@@ -119,9 +121,7 @@ def assert_parity(
     mx_np = mx_to_np(mx_out) if not isinstance(mx_out, np.ndarray) else mx_out
 
     if pt_np.shape != mx_np.shape:
-        raise AssertionError(
-            f"[{name}] shape mismatch: pt={pt_np.shape} vs mx={mx_np.shape}"
-        )
+        raise AssertionError(f"[{name}] shape mismatch: pt={pt_np.shape} vs mx={mx_np.shape}")
 
     diff = np.abs(pt_np - mx_np)
     max_abs = float(diff.max())

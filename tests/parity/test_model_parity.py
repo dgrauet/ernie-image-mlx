@@ -107,12 +107,16 @@ def test_full_model_parity():
     timestep_np = np.array([500.0, 750.0], dtype=np.float32)
 
     with torch.no_grad():
-        pt_out = pt_model(
-            torch.from_numpy(x_np),
-            torch.from_numpy(timestep_np),
-            torch.from_numpy(text_np),
-            torch.from_numpy(text_lens_np),
-        ).float().numpy()
+        pt_out = (
+            pt_model(
+                torch.from_numpy(x_np),
+                torch.from_numpy(timestep_np),
+                torch.from_numpy(text_np),
+                torch.from_numpy(text_lens_np),
+            )
+            .float()
+            .numpy()
+        )
 
     mx_out = np.array(
         mx_model(
@@ -128,6 +132,4 @@ def test_full_model_parity():
     max_abs = float(diff.max())
     mean_abs = float(diff.mean())
     # Observed ~3e-6 on Apple Silicon fp32; 1e-4 leaves headroom for M1/M2/M3 variation.
-    assert max_abs < 1e-4, (
-        f"full-model parity FAIL: max_abs={max_abs:.3e} mean_abs={mean_abs:.3e}"
-    )
+    assert max_abs < 1e-4, f"full-model parity FAIL: max_abs={max_abs:.3e} mean_abs={mean_abs:.3e}"

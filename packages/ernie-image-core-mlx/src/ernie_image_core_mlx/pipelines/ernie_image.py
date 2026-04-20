@@ -26,11 +26,10 @@ from pathlib import Path
 
 import mlx.core as mx
 import numpy as np
-from mlx_arsenal.diffusion import FlowMatchEulerDiscreteScheduler, classifier_free_guidance
+from mlx_arsenal.diffusion import FlowMatchEulerDiscreteScheduler
 from mlx_arsenal.spatial import pixel_shuffle
 
 from ernie_image_core_mlx.loader.weights import (
-    ERNIE_IMAGE_MLX_WEIGHTS_DIR_ENV,
     resolve_weights_dir,
 )
 from ernie_image_core_mlx.model.config import (
@@ -113,9 +112,7 @@ def _config_from_text_encoder_json(blob: dict) -> Mistral3TextConfig:
         rope_factor=rope.get("factor", 16.0),
         rope_beta_fast=rope.get("beta_fast", 32.0),
         rope_beta_slow=rope.get("beta_slow", 1.0),
-        rope_original_max_position_embeddings=rope.get(
-            "original_max_position_embeddings", 16384
-        ),
+        rope_original_max_position_embeddings=rope.get("original_max_position_embeddings", 16384),
     )
 
 
@@ -159,8 +156,8 @@ def _pad_concat_text(text_hiddens: list[mx.array]) -> mx.array:
 
 def _tensor_to_pil_image(x: mx.array):
     """`(3, H, W)` float in [-1, 1] → PIL.Image RGB."""
-    from PIL import Image
     import numpy as np
+    from PIL import Image
 
     arr = np.array(x)
     arr = np.clip((arr + 1.0) * 0.5, 0.0, 1.0)
@@ -210,16 +207,14 @@ class ErnieImagePipeline:
 
         tf_cfg = _config_from_transformer_json(_load_json(weights_dir / "transformer_config.json"))
         vae_cfg = _config_from_vae_json(_load_json(weights_dir / "vae_config.json"))
-        text_cfg = _config_from_text_encoder_json(
-            _load_json(weights_dir / "text_encoder_config.json")
-        )
+        text_cfg = _config_from_text_encoder_json(_load_json(weights_dir / "text_encoder_config.json"))
 
         transformer = ErnieImageTransformer2DModel(tf_cfg)
         vae = AutoencoderKLFlux2(vae_cfg)
         text_encoder = Mistral3TextEncoder(text_cfg)
 
-        from mlx.utils import tree_unflatten
         import mlx.nn as mx_nn
+        from mlx.utils import tree_unflatten
 
         def _load_stripped(path: Path, prefix: str) -> dict:
             """Load a safetensors file produced by `mlx-forge convert ernie-image`
@@ -229,7 +224,7 @@ class ErnieImagePipeline:
             stripped: dict = {}
             for k, v in raw.items():
                 if k.startswith(p):
-                    stripped[k[len(p):]] = v
+                    stripped[k[len(p) :]] = v
                 else:
                     stripped[k] = v
             return stripped
@@ -319,7 +314,7 @@ class ErnieImagePipeline:
             return None
         try:
             tok = AutoTokenizer.from_pretrained(str(weights_dir))
-        except Exception:  # noqa: BLE001
+        except Exception:
             return None
         # Baidu's tokenizer_config.json declares `pad_token: "<pad>"` but the
         # community Pixtral tokenizer ships with pad_token=None. Inject it so
@@ -352,10 +347,7 @@ class ErnieImagePipeline:
         )
         raw_ids = tok["input_ids"]
         bos = self.tokenizer.bos_token_id or 1
-        per_prompt = [
-            [bos] + r if (not r or r[0] != bos) else r
-            for r in raw_ids
-        ]
+        per_prompt = [[bos] + r if (not r or r[0] != bos) else r for r in raw_ids]
         if not any(per_prompt):
             per_prompt = [[bos] for _ in per_prompt]
 

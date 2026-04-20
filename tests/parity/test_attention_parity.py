@@ -23,6 +23,7 @@ pytestmark = pytest.mark.parity
 # RoPE parity — verifies the Megatron non-interleaved variant matches exactly.
 # ---------------------------------------------------------------------------
 
+
 def test_rope_embed_matches_reference():
     import mlx.core as mx
 
@@ -78,6 +79,7 @@ def test_apply_rotary_matches_reference():
 # Full attention parity — PT reference built from the diffusers Attention wrapper
 # ---------------------------------------------------------------------------
 
+
 def _build_pt_attention(hidden_size: int, num_heads: int, eps: float):
     from tests.parity._pt_reference import ErnieImageAttention
 
@@ -128,7 +130,7 @@ def test_attention_forward_parity():
     mx_attn = ErnieAttention(cfg)
     flat = [(_pt_to_mx_rename(k), mx.array(v.float().numpy())) for k, v in pt_sd.items()]
     mx_attn.update(mx_utils.tree_unflatten(flat))
-    mx.eval( mx_attn.parameters() )
+    mx.eval(mx_attn.parameters())
 
     B, N = 2, 80
     rng = np.random.default_rng(42)
@@ -138,18 +140,20 @@ def test_attention_forward_parity():
     from tests.parity._pt_reference import ErnieImageEmbedND3 as PtEmbed
 
     pt_embed = PtEmbed(dim=cfg.head_dim, theta=cfg.rope_theta, axes_dim=cfg.rope_axes_dim)
-    mx_embed = ErnieImageEmbedND3(
-        head_dim=cfg.head_dim, theta=cfg.rope_theta, axes_dim=cfg.rope_axes_dim
-    )
+    mx_embed = ErnieImageEmbedND3(head_dim=cfg.head_dim, theta=cfg.rope_theta, axes_dim=cfg.rope_axes_dim)
 
     pt_freqs = pt_embed(torch.from_numpy(ids_np))
     mx_freqs = mx_embed(mx.array(ids_np))
 
     with torch.no_grad():
-        pt_out = pt_attn(
-            hidden_states=torch.from_numpy(x_np),
-            image_rotary_emb=pt_freqs,
-        ).float().numpy()
+        pt_out = (
+            pt_attn(
+                hidden_states=torch.from_numpy(x_np),
+                image_rotary_emb=pt_freqs,
+            )
+            .float()
+            .numpy()
+        )
 
     mx_out = np.array(mx_attn(mx.array(x_np), freqs_cis=mx_freqs))
 
@@ -157,6 +161,4 @@ def test_attention_forward_parity():
     diff = np.abs(pt_out - mx_out)
     max_abs = float(diff.max())
     mean_abs = float(diff.mean())
-    assert max_abs < 1e-4, (
-        f"attention parity FAIL: max_abs={max_abs:.3e} mean_abs={mean_abs:.3e}"
-    )
+    assert max_abs < 1e-4, f"attention parity FAIL: max_abs={max_abs:.3e} mean_abs={mean_abs:.3e}"

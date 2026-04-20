@@ -92,8 +92,8 @@ class ErnieImageAdaLNContinuous(nn.Module):
 
     def __call__(self, x: mx.array, conditioning: mx.array) -> mx.array:
         """Args:
-            x: `[B, S, H]`
-            conditioning: `[B, H]`
+        x: `[B, S, H]`
+        conditioning: `[B, H]`
         """
         scale, shift = mx.split(self.linear(conditioning), 2, axis=-1)
         x = self.norm(x)
@@ -110,9 +110,7 @@ class ErnieImagePatchEmbedLinear(nn.Module):
     def __init__(self, in_channels: int, hidden_size: int, patch_size: int):
         super().__init__()
         if patch_size != 1:
-            raise NotImplementedError(
-                f"patch_size={patch_size} not supported yet — use Conv2d-based variant"
-            )
+            raise NotImplementedError(f"patch_size={patch_size} not supported yet — use Conv2d-based variant")
         self.patch_size = patch_size
         self.proj = nn.Linear(in_channels, hidden_size, bias=True)
 
@@ -160,14 +158,10 @@ class ErnieImageTransformer2DModel(nn.Module):
         super().__init__()
         self.cfg = cfg
 
-        self.x_embedder = ErnieImagePatchEmbedLinear(
-            cfg.in_channels, cfg.hidden_size, cfg.patch_size
-        )
+        self.x_embedder = ErnieImagePatchEmbedLinear(cfg.in_channels, cfg.hidden_size, cfg.patch_size)
         # text_proj only exists when text_in_dim != hidden_size (matches reference).
         self.text_proj = (
-            nn.Linear(cfg.text_in_dim, cfg.hidden_size, bias=False)
-            if cfg.text_in_dim != cfg.hidden_size
-            else None
+            nn.Linear(cfg.text_in_dim, cfg.hidden_size, bias=False) if cfg.text_in_dim != cfg.hidden_size else None
         )
         # Time stack: sinusoidal proj (param-free) + MLP (silu between 2 Linears).
         self.time_embedding = TimestepEmbedding(cfg.hidden_size, cfg.hidden_size)
@@ -195,7 +189,7 @@ class ErnieImageTransformer2DModel(nn.Module):
     ) -> mx.array:
         cfg = self.cfg
         p = cfg.patch_size
-        B, C_in, H, W = hidden_states.shape
+        B, _C_in, H, W = hidden_states.shape
         Hp, Wp = H // p, W // p
         N_img = Hp * Wp
 
@@ -239,10 +233,7 @@ class ErnieImageTransformer2DModel(nn.Module):
 
         # ---- attention mask: True=attend, False=padding ----
         if Tmax > 0:
-            text_valid = (
-                mx.arange(Tmax, dtype=mx.int32).reshape(1, Tmax)
-                < text_lens.astype(mx.int32).reshape(B, 1)
-            )
+            text_valid = mx.arange(Tmax, dtype=mx.int32).reshape(1, Tmax) < text_lens.astype(mx.int32).reshape(B, 1)
             img_ones = mx.ones((B, N_img), dtype=mx.bool_)
             attn_mask = mx.concatenate([img_ones, text_valid], axis=1)
         else:
