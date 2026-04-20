@@ -1,7 +1,11 @@
 [project]
-name = "ernie-image-mlx"
-version = "0.2.0"
-description = "Pure MLX port of Baidu ERNIE-Image (8B text-to-image DiT) for Apple Silicon inference"
+# Workspace-only project — NOT published to PyPI. The actual distributable lives
+# at `packages/ernie-image-core-mlx/` and is published as `ernie-image-mlx`
+# (same user-facing name). The distinct name here prevents a local-identity
+# collision with the workspace member.
+name = "ernie-image-mlx-workspace"
+version = "0.3.0"
+description = "uv workspace root for the ernie-image-mlx monorepo"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
@@ -19,7 +23,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
-    "ernie-image-core-mlx",
+    "ernie-image-mlx",
 ]
 
 [project.optional-dependencies]
@@ -33,7 +37,7 @@ dev = [
     "ruff>=0.7.0",
     "pre-commit>=3.5",
 ]
-all = ["ernie-image-mlx[parity,dev]"]
+all = ["ernie-image-mlx-workspace[parity,dev]"]
 
 [project.urls]
 Homepage = "https://github.com/dgrauet/ernie-image-mlx"
@@ -44,7 +48,7 @@ Reference = "https://huggingface.co/baidu/ERNIE-Image"
 members = ["packages/*"]
 
 [tool.uv.sources]
-ernie-image-core-mlx = { workspace = true }
+ernie-image-mlx = { workspace = true }
 
 [tool.ruff]
 line-length = 120
