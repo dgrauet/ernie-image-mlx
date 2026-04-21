@@ -4,5 +4,5 @@ from ernie_image_core_mlx.model.config import ErnieImageConfig, ErnieImageVaeCon
 from ernie_image_core_mlx.pipelines.ernie_image import ErnieImagePipeline
 from ernie_image_core_mlx.prompt_enhancer import PromptEnhancer
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 __all__ = ["ErnieImageConfig", "ErnieImagePipeline", "ErnieImageVaeConfig", "PromptEnhancer"]

@@ -426,6 +426,9 @@ class ErnieImagePipeline:
         pe_top_p: float = 0.95,
         pe_max_new_tokens: int = 2048,
         pe_seed: int | None = None,
+        pe_language: str | None = None,
+        pe_system_prompt: str | None = None,
+        pe_prefill: str | None = None,
     ) -> PipelineOutput:
         cfg = self.config
         tf_cfg: ErnieImageConfig = self.transformer.cfg
@@ -450,6 +453,9 @@ class ErnieImagePipeline:
                     top_p=pe_top_p,
                     max_new_tokens=pe_max_new_tokens,
                     seed=pe_seed,
+                    language=pe_language,
+                    system_prompt=pe_system_prompt,
+                    prefill=pe_prefill,
                 )
                 for p in prompt
             ]

@@ -31,8 +31,9 @@ def _build_parser() -> argparse.ArgumentParser:
         "--prompt",
         required=True,
         help=(
-            "Text prompt. Any language works; the Prompt Enhancer expands it into a "
-            "rich Chinese visual description before the text encoder (disable with --no-pe)."
+            "Text prompt. Any language works; the Prompt Enhancer expands it "
+            "into a rich visual description in the same language as the prompt "
+            "(disable with --no-pe, override wording with --pe-system-prompt)."
         ),
     )
     gen.add_argument(
@@ -113,6 +114,32 @@ def _build_parser() -> argparse.ArgumentParser:
             "Pass -1 to draw random. Defaults to non-deterministic sampling to match diffusers."
         ),
     )
+    gen.add_argument(
+        "--pe-language",
+        default=None,
+        help=(
+            "Output language for the enhanced prompt (e.g. 'French', 'English'). "
+            "Auto-detected from the prompt when omitted."
+        ),
+    )
+    gen.add_argument(
+        "--pe-system-prompt",
+        default=None,
+        help=(
+            "Fully override the Prompt Enhancer's system prompt (wins over "
+            "--pe-language). Default is a language-specific template."
+        ),
+    )
+    gen.add_argument(
+        "--pe-prefill",
+        default=None,
+        help=(
+            "Seed the PE's first assistant tokens (e.g. 'A ' for English). "
+            "Defaults to a per-language starter that prevents the model's "
+            "Chinese-only fine-tune from slipping back to Chinese. Pass '' "
+            "to disable."
+        ),
+    )
     return p
 
 
@@ -158,6 +185,9 @@ def _run_generate(args: argparse.Namespace) -> int:
         seed=seed,
         use_pe=not args.no_pe,
         pe_seed=pe_seed,
+        pe_language=args.pe_language,
+        pe_system_prompt=args.pe_system_prompt,
+        pe_prefill=args.pe_prefill,
     )
     elapsed = time.perf_counter() - t0
 

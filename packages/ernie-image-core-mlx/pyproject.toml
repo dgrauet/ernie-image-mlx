@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ernie-image-mlx"
-version = "0.3.0"
+version = "0.3.1"
 description = "Pure MLX port of Baidu ERNIE-Image (8B text-to-image DiT) for Apple Silicon inference — includes the 3B Ministral3 Prompt Enhancer"
 readme = "README.md"
 license = "MIT"

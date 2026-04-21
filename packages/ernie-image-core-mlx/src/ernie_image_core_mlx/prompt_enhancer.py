@@ -3,14 +3,15 @@
 The reference `diffusers.ErnieImagePipeline` runs a 3B Ministral3 CausalLM
 before the text encoder. It takes the user prompt, wraps it as JSON
 ``{"prompt": ..., "width": W, "height": H}`` and pushes that through a chat
-template (``pe/chat_template.jinja``) that bakes in a Chinese system prompt:
+template (``pe/chat_template.jinja``) that ships a Chinese system prompt.
+Because the baked-in instruction is written in Chinese, the model defaults
+to answering in Chinese regardless of the prompt's language — which is
+jarring when the user's prompt is in English/French/etc.
 
-    You are a professional text-to-image prompt enhancement assistant.
-    You will receive a short image description from the user and the target
-    generation resolution. Please expand it into a rich, detailed visual
-    description to help the text-to-image model generate high-quality
-    images. Output only the enhanced description, without any explanation
-    or prefix.
+We bypass the Jinja template and build the chat string manually (same
+``<bos>[SYSTEM_PROMPT]…[/SYSTEM_PROMPT][INST]…[/INST]`` shape) so we can
+supply a language-preserving system prompt by default. The user can still
+override the system prompt per-call.
 
 Generation params (from ``pipeline_ernie_image.py``):
     temperature=0.6, top_p=0.95, max_new_tokens=2048
@@ -37,6 +38,208 @@ from ernie_image_core_mlx.loader.weights import resolve_weights_dir
 from ernie_image_core_mlx.model.config import Mistral3TextConfig
 
 DEFAULT_PE_REPO_ID = "dgrauet/ernie-image-pe-mlx-q4"
+
+# The PE was fine-tuned with a Chinese-only system prompt, so it defaults to
+# Chinese output regardless of the input language. Empirically, "write in
+# <LANGUAGE>" with an EXPLICIT language name flips the output cleanly —
+# whereas "respond in the same language as the prompt" does not (the model
+# never learned to introspect the user's language). We therefore detect the
+# language upfront and bake the name into the system prompt.
+DEFAULT_SYSTEM_PROMPT_TEMPLATE = (
+    "You are a professional text-to-image prompt enhancement assistant. "
+    "You will receive a short image description from the user and the "
+    "target generation resolution. Expand it into a rich, detailed visual "
+    "description to help the text-to-image model generate high-quality "
+    "images. CRITICAL: write the entire enhanced description in {language}. "
+    "Output only the enhanced description, without any explanation or prefix."
+)
+
+# Scripts that uniquely identify a language — checked BEFORE CJK Unified
+# because Japanese and Korean text often includes Han characters, and we
+# want kana / hangul to win the classification.
+_UNIQUE_SCRIPT_RANGES: tuple[tuple[int, int, str], ...] = (
+    (0x3040, 0x309F, "Japanese"),  # Hiragana
+    (0x30A0, 0x30FF, "Japanese"),  # Katakana
+    (0xAC00, 0xD7AF, "Korean"),  # Hangul syllables
+    (0x0400, 0x04FF, "Russian"),  # Cyrillic
+    (0x0600, 0x06FF, "Arabic"),
+    (0x0590, 0x05FF, "Hebrew"),
+    (0x0900, 0x097F, "Hindi"),  # Devanagari
+    (0x0E00, 0x0E7F, "Thai"),
+)
+
+# CJK Unified Han — only reached after ruling out kana/hangul, so any hit
+# here is safe to classify as Chinese.
+_CJK_RANGES: tuple[tuple[int, int], ...] = (
+    (0x4E00, 0x9FFF),  # CJK Unified
+    (0x3400, 0x4DBF),  # CJK Extension A
+)
+
+# Short stopword lists per Latin-script language. English is explicitly
+# included (rather than used as a bare fallback) because any Romance
+# language that shares " a " / " o " / " e " would otherwise outscore a
+# legitimate English prompt on stopword counts alone.
+_LATIN_STOPWORDS: dict[str, tuple[str, ...]] = {
+    "English": (
+        " the ",
+        " a ",
+        " an ",
+        " of ",
+        " and ",
+        " is ",
+        " in ",
+        " on ",
+        " with ",
+        " at ",
+        " to ",
+        " for ",
+        " by ",
+        " from ",
+    ),
+    "French": (
+        " le ",
+        " la ",
+        " les ",
+        " un ",
+        " une ",
+        " des ",
+        " du ",
+        " de ",
+        " et ",
+        " est ",
+        " dans ",
+        " sur ",
+        " avec ",
+        " sous ",
+        " pour ",
+    ),
+    "Spanish": (
+        " el ",
+        " la ",
+        " los ",
+        " las ",
+        " un ",
+        " una ",
+        " y ",
+        " de ",
+        " del ",
+        " que ",
+        " en ",
+        " con ",
+        " por ",
+        " para ",
+    ),
+    "Italian": (
+        " il ",
+        " la ",
+        " gli ",
+        " le ",
+        " un ",
+        " una ",
+        " di ",
+        " del ",
+        " e ",
+        " che ",
+        " in ",
+        " su ",
+        " con ",
+    ),
+    "Portuguese": (
+        " o ",
+        " a ",
+        " os ",
+        " as ",
+        " um ",
+        " uma ",
+        " de ",
+        " do ",
+        " da ",
+        " e ",
+        " que ",
+        " em ",
+        " com ",
+    ),
+    "German": (
+        " der ",
+        " die ",
+        " das ",
+        " den ",
+        " ein ",
+        " eine ",
+        " und ",
+        " ist ",
+        " von ",
+        " mit ",
+        " auf ",
+        " für ",
+    ),
+}
+
+
+def _detect_language_name(text: str) -> str:
+    """Best-effort language name for PE system-prompt injection.
+
+    Dispatch order:
+      1. Unique non-Latin scripts (kana/hangul/cyrillic/…) — a single
+         matching codepoint decides the language.
+      2. CJK Han — only reached after (1) ruled out Japanese/Korean, so
+         any hit is Chinese.
+      3. Latin — count stopword hits, take the winner. Ties or empty
+         scores fall back to English, the model's other common language.
+    """
+    saw_cjk = False
+    for ch in text:
+        cp = ord(ch)
+        for lo, hi, name in _UNIQUE_SCRIPT_RANGES:
+            if lo <= cp <= hi:
+                return name
+        if not saw_cjk:
+            for lo, hi in _CJK_RANGES:
+                if lo <= cp <= hi:
+                    saw_cjk = True
+                    break
+    if saw_cjk:
+        return "Chinese"
+
+    padded = f" {text.lower()} "
+    scores = {lang: sum(padded.count(w) for w in kws) for lang, kws in _LATIN_STOPWORDS.items()}
+    best_lang = max(scores, key=scores.get)
+    return best_lang if scores[best_lang] >= 1 else "English"
+
+
+def _default_system_prompt(language: str) -> str:
+    return DEFAULT_SYSTEM_PROMPT_TEMPLATE.format(language=language)
+
+
+# Even with a language-specific system prompt, the PE's chinese-only
+# fine-tuning makes the first generated token drift back to CJK on a
+# majority of seeds. Seeding the assistant turn with a natural starter
+# word in the target language (e.g. ``A `` for English, ``Une `` for
+# French) lets the model's next-token prediction lock onto the target
+# language immediately — seed sensitivity drops from ~75 % CJK leaks to
+# ~0 % in practice. The starter is part of the returned string (no stripping).
+_LANGUAGE_PREFILL: dict[str, str] = {
+    "English": "A ",
+    "French": "Une ",
+    "Spanish": "Una ",
+    "Italian": "Una ",
+    "Portuguese": "Uma ",
+    "German": "Ein ",
+    "Russian": "",
+    "Arabic": "",
+    "Hebrew": "",
+    "Hindi": "",
+    "Thai": "",
+    # Chinese / Japanese / Korean keep the model's natural bias — no prefill
+    # needed, and the above Latin starter would fight CJK tokenization.
+    "Chinese": "",
+    "Japanese": "",
+    "Korean": "",
+}
+
+
+def _prefill_for(language: str) -> str:
+    return _LANGUAGE_PREFILL.get(language, "")
 
 
 def _ministral3_args_dict(cfg: Mistral3TextConfig) -> dict:
@@ -190,17 +393,26 @@ class PromptEnhancer(nn.Module):
     # Inference
     # ------------------------------------------------------------------
 
-    def _apply_chat_template(self, prompt: str, width: int, height: int) -> str:
-        """Reference does ``json.dumps({"prompt": p, "width": W, "height": H}, ensure_ascii=False)``
-        then wraps it in ``[INST]...[/INST]``. The Jinja template prepends BOS and
-        the Chinese system prompt automatically.
+    def _apply_chat_template(
+        self,
+        prompt: str,
+        width: int,
+        height: int,
+        *,
+        system_prompt: str,
+    ) -> str:
+        """Build the chat string in the exact shape the PE was trained on
+        (``<bos>[SYSTEM_PROMPT]<sys>[/SYSTEM_PROMPT][INST]<json>[/INST]``)
+        without going through the bundled Jinja template.
+
+        Going manual lets us swap the hardcoded Chinese system prompt for a
+        language-specific one (the PE never learned to introspect the user's
+        language), while keeping the JSON payload and control-token
+        boundaries identical to the reference.
         """
         user_content = json.dumps({"prompt": prompt, "width": width, "height": height}, ensure_ascii=False)
-        return self.tokenizer.apply_chat_template(
-            [{"role": "user", "content": user_content}],
-            tokenize=False,
-            add_generation_prompt=False,
-        )
+        bos = self.tokenizer.bos_token or "<s>"
+        return f"{bos}[SYSTEM_PROMPT]{system_prompt}[/SYSTEM_PROMPT][INST]{user_content}[/INST]"
 
     def enhance(
         self,
@@ -212,28 +424,72 @@ class PromptEnhancer(nn.Module):
         top_p: float = 0.95,
         max_new_tokens: int = 2048,
         seed: int | None = None,
+        language: str | None = None,
+        system_prompt: str | None = None,
+        prefill: str | None = None,
+        repetition_penalty: float | None = 1.15,
+        repetition_context_size: int = 128,
     ) -> str:
         """Expand ``prompt`` into a richer visual description using the PE CausalLM.
 
         Matches reference sampling (T=0.6, top_p=0.95, max=2048). Pass ``seed``
         for reproducibility — the reference is non-deterministic by default.
+
+        Output language is controlled, in priority order, by:
+          1. ``system_prompt=...`` — used verbatim (any override wins).
+          2. ``language=...`` — injected into ``DEFAULT_SYSTEM_PROMPT_TEMPLATE``.
+          3. auto-detection from ``prompt`` via ``_detect_language_name``.
+
+        ``prefill`` seeds the first assistant tokens so the PE cannot slip
+        back into Chinese on non-Chinese prompts. Defaults to a per-language
+        starter (see ``_LANGUAGE_PREFILL``). Pass ``prefill=""`` to disable.
+
+        ``repetition_penalty`` is on by default (1.15 over a 128-token window)
+        because the PE's Chinese-only fine-tune degenerates on non-Chinese
+        outputs — first into single-word loops ("noir, noir, …"), and if
+        those are penalized, into whole-sentence loops every ~30 tokens.
+        A 128-token window catches both. Set to ``None`` to disable and
+        match the reference sampling stack exactly.
         """
         from mlx_lm.generate import generate_step
-        from mlx_lm.sample_utils import make_sampler
+        from mlx_lm.sample_utils import make_logits_processors, make_sampler
 
         if seed is not None:
             mx.random.seed(seed)
 
-        templated = self._apply_chat_template(prompt, width, height)
-        # ``apply_chat_template`` returns the full formatted string including BOS;
-        # encode WITHOUT adding another BOS.
-        input_ids = self.tokenizer.encode(templated, add_special_tokens=False)
+        if system_prompt is None:
+            lang = language or _detect_language_name(prompt)
+            system_prompt = _default_system_prompt(lang)
+        else:
+            lang = language or _detect_language_name(prompt)
+        if prefill is None:
+            prefill = _prefill_for(lang)
+
+        templated = self._apply_chat_template(prompt, width, height, system_prompt=system_prompt)
+        # Seed the assistant's first tokens so the model's next-token prediction
+        # locks onto the target-language script (see ``_LANGUAGE_PREFILL`` note).
+        templated_with_prefill = templated + prefill
+        input_ids = self.tokenizer.encode(templated_with_prefill, add_special_tokens=False)
         prompt_arr = mx.array(input_ids, dtype=mx.int32)
 
         sampler = make_sampler(temp=temperature, top_p=top_p)
+        logits_processors = (
+            make_logits_processors(
+                repetition_penalty=repetition_penalty,
+                repetition_context_size=repetition_context_size,
+            )
+            if repetition_penalty is not None
+            else None
+        )
         eos_id = self.tokenizer.eos_token_id
         generated: list[int] = []
-        for token, _ in generate_step(prompt_arr, self.model, max_tokens=max_new_tokens, sampler=sampler):
+        for token, _ in generate_step(
+            prompt_arr,
+            self.model,
+            max_tokens=max_new_tokens,
+            sampler=sampler,
+            logits_processors=logits_processors,
+        ):
             # ``generate_step`` may yield either an mx.array scalar or a Python
             # int depending on mlx-lm version — normalize both to int.
             tok_id = token.item() if hasattr(token, "item") else int(token)
@@ -241,7 +497,15 @@ class PromptEnhancer(nn.Module):
                 break
             generated.append(tok_id)
 
-        return self.tokenizer.decode(generated, skip_special_tokens=True).strip()
+        completion = self.tokenizer.decode(generated, skip_special_tokens=True)
+        return (prefill + completion).strip()
 
     def __call__(self, prompt: str, **kwargs) -> str:
         return self.enhance(prompt, **kwargs)
+
+
+__all__ = [
+    "DEFAULT_PE_REPO_ID",
+    "DEFAULT_SYSTEM_PROMPT_TEMPLATE",
+    "PromptEnhancer",
+]

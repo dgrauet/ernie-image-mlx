@@ -4,7 +4,7 @@
 # (same user-facing name). The distinct name here prevents a local-identity
 # collision with the workspace member.
 name = "ernie-image-mlx-workspace"
-version = "0.3.0"
+version = "0.3.1"
 description = "uv workspace root for the ernie-image-mlx monorepo"
 readme = "README.md"
 license = "MIT"

@@ -14,9 +14,13 @@ from unittest.mock import MagicMock
 from ernie_image_core_mlx.model.config import Mistral3TextConfig
 from ernie_image_core_mlx.prompt_enhancer import (
     DEFAULT_PE_REPO_ID,
+    DEFAULT_SYSTEM_PROMPT_TEMPLATE,
     PromptEnhancer,
+    _default_system_prompt,
+    _detect_language_name,
     _ministral3_args_dict,
     _pe_config_from_json,
+    _prefill_for,
 )
 
 
@@ -78,64 +82,108 @@ def test_pe_config_from_json_reads_real_pe_blob():
 
 
 class _FakeTokenizer:
-    """Minimal tokenizer stand-in capturing the ``apply_chat_template`` call so
-    the chat-template wiring can be inspected without a real tokenizer on disk."""
+    """Minimal tokenizer stand-in — the rewritten ``_apply_chat_template``
+    builds the string manually, so we only need ``bos_token`` for it to work."""
 
     def __init__(self):
-        self.captured: list[dict] = []
         self.pad_token = "<pad>"
+        self.bos_token = "<s>"
         self.bos_token_id = 1
         self.eos_token_id = 2
         self.pad_token_id = 11
 
-    def apply_chat_template(self, messages, *, tokenize, add_generation_prompt):
-        self.captured.append(
-            {
-                "messages": messages,
-                "tokenize": tokenize,
-                "add_generation_prompt": add_generation_prompt,
-            }
-        )
-        return "<fake-rendered-template>"
+
+def _extract_user_json(rendered: str) -> dict:
+    """Pull the JSON payload out of the ``[INST]…[/INST]`` block."""
+    start = rendered.index("[INST]") + len("[INST]")
+    end = rendered.index("[/INST]", start)
+    return json.loads(rendered[start:end])
 
 
 def test_chat_template_wraps_prompt_as_json_payload():
-    """Reference behavior (diffusers): the user prompt must be serialized as
+    """Reference behavior (diffusers): the user prompt is serialized as
     JSON ``{"prompt": ..., "width": W, "height": H}`` with ``ensure_ascii=False``
-    so Chinese / emoji pass through unescaped — and the message role must be
-    'user' so the Jinja template emits the ``[INST]...[/INST]`` wrapping."""
+    inside an ``[INST]...[/INST]`` block, preceded by the BOS-wrapped system
+    prompt. We build this manually so we can swap the system prompt — but the
+    payload shape must stay identical to what the PE was trained on."""
     pe = PromptEnhancer.__new__(PromptEnhancer)
     pe.tokenizer = _FakeTokenizer()
 
-    rendered = pe._apply_chat_template("一只小狗", 1024, 768)
-    assert rendered == "<fake-rendered-template>"
+    rendered = pe._apply_chat_template("一只小狗", 1024, 768, system_prompt="SYS")
 
-    call = pe.tokenizer.captured[0]
-    assert call["tokenize"] is False
-    # The reference calls with ``add_generation_prompt=False`` — that relies on
-    # the jinja template doing the right thing. Changing to True would
-    # double-emit the [INST] block.
-    assert call["add_generation_prompt"] is False
-
-    msgs = call["messages"]
-    assert len(msgs) == 1 and msgs[0]["role"] == "user"
-    payload = json.loads(msgs[0]["content"])
-    assert payload == {"prompt": "一只小狗", "width": 1024, "height": 768}
+    assert rendered.startswith("<s>[SYSTEM_PROMPT]SYS[/SYSTEM_PROMPT][INST]")
+    assert rendered.endswith("[/INST]")
+    assert _extract_user_json(rendered) == {"prompt": "一只小狗", "width": 1024, "height": 768}
 
 
 def test_apply_chat_template_preserves_non_ascii():
-    """``ensure_ascii=False`` is not optional — the PE was trained on Chinese
-    system-prompt + Chinese/UTF-8 user content, so escaping Unicode into
-    ``\\uXXXX`` changes what the model sees."""
+    """``ensure_ascii=False`` is not optional — the PE sees Chinese/emoji/
+    diacritic characters directly at training time. Escaping to ``\\uXXXX``
+    would change what the model sees at inference."""
     pe = PromptEnhancer.__new__(PromptEnhancer)
     pe.tokenizer = _FakeTokenizer()
-    pe._apply_chat_template("café — 💡 — 中文", 512, 512)
+    rendered = pe._apply_chat_template("café — 💡 — 中文", 512, 512, system_prompt="SYS")
 
-    content = pe.tokenizer.captured[0]["messages"][0]["content"]
-    # Direct Unicode, not escape sequences.
-    assert "café" in content
-    assert "中文" in content
-    assert "\\u" not in content
+    assert "café" in rendered
+    assert "中文" in rendered
+    assert "\\u" not in rendered
+
+
+def test_default_system_prompt_names_target_language():
+    """The PE never learned to introspect "the user's language"; empirically
+    it only switches out of Chinese when an explicit language NAME is given.
+    The template must therefore carry a ``{language}`` slot, and the rendered
+    default must name that language in the instruction."""
+    assert "{language}" in DEFAULT_SYSTEM_PROMPT_TEMPLATE
+
+    rendered = _default_system_prompt("French")
+    assert "French" in rendered
+    assert "{language}" not in rendered
+
+
+def test_detect_language_handles_non_latin_scripts():
+    """Non-Latin scripts must be classified deterministically from a single
+    codepoint scan — these are the anchors that make the auto-detection
+    robust in the cases where it matters most (e.g. the PE was trained
+    heavily on Chinese, so getting the Chinese → Chinese case right is
+    essential)."""
+    assert _detect_language_name("一只黑色的小猫") == "Chinese"
+    assert _detect_language_name("黒い猫") == "Japanese"
+    assert _detect_language_name("검은 고양이") == "Korean"
+    assert _detect_language_name("чёрный кот") == "Russian"
+
+
+def test_detect_language_latin_script_heuristic():
+    """Latin-script detection is best-effort: English is the safe fallback
+    for stopword-sparse prompts, but common function words should still
+    steer common Romance languages correctly."""
+    assert _detect_language_name("a small black cat on a rooftop at sunset") == "English"
+    assert _detect_language_name("un petit chat noir sur un toit au coucher du soleil") == "French"
+    assert _detect_language_name("un pequeño gato negro en un tejado al atardecer") == "Spanish"
+
+
+def test_detect_language_falls_back_to_english_when_uncertain():
+    """Two-word prompts with no stopwords shouldn't trip a false positive
+    into French/Spanish/etc. — the fallback must be English so the model
+    gets its best-shot default."""
+    assert _detect_language_name("cute puppy") == "English"
+
+
+def test_prefill_for_latin_languages_and_cjk_blank():
+    """The prefill locks the PE's first assistant tokens onto the target
+    language's script. For Latin languages we need a natural starter
+    (``A`` / ``Une`` / ``Una`` / ``Ein``). CJK languages keep the model's
+    native bias, so their prefill must be empty — a Latin starter there
+    would fight Chinese/Japanese tokenization and corrupt the output."""
+    assert _prefill_for("English").strip() == "A"
+    assert _prefill_for("French").strip() == "Une"
+    assert _prefill_for("Spanish").strip() == "Una"
+    assert _prefill_for("German").strip() == "Ein"
+    assert _prefill_for("Chinese") == ""
+    assert _prefill_for("Japanese") == ""
+    assert _prefill_for("Korean") == ""
+    # Unknown language → blank (safer than guessing a wrong starter).
+    assert _prefill_for("Klingon") == ""
 
 
 def test_from_pretrained_missing_cfg_raises(tmp_path):

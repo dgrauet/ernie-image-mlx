@@ -50,7 +50,17 @@ The first six were caught by the three-test diagnostic in the mlx-porting skill'
 - Quantization: int4 via `--quantize --bits 4` → ~1.8 GB (from 7 GB fp16). Quantizes both block Linears AND `embed_tokens` (MLX's `QuantizedEmbedding.as_linear` handles the tied lm_head path natively). Skipping `embed_tokens` would leave ~768 MB of unquantized vocab table on disk.
 - Recipe drops the redundant `lm_head.weight` at conversion time (`tie_word_embeddings=true` → mlx-lm's sanitize drops it at load, but dropping on disk saves ~768 MB fp16).
 - Pipeline integration: `ErnieImagePipeline.from_pretrained(..., pe_repo_id="dgrauet/ernie-image-pe-mlx-q4")`, runtime `pipe(..., use_pe=True)`. `PipelineOutput.revised_prompts` exposes the expansion so CLI can print it.
-- CLI: `--no-pe`, `--pe-repo-id`, `--pe-local-dir`, `--pe-seed`. Revised prompt printed to stdout when PE ran.
+- CLI: `--no-pe`, `--pe-repo-id`, `--pe-local-dir`, `--pe-seed`, `--pe-language`, `--pe-system-prompt`, `--pe-prefill`. Revised prompt printed to stdout when PE ran.
+
+### PE language preservation (0.3.1)
+
+The bundled Jinja template bakes a Chinese system prompt, so the upstream PE answers in Chinese regardless of the input language — jarring for FR/EN/ES/... prompts. The MLX port bypasses the Jinja template and builds the chat string manually, then fixes the model's Chinese bias with three stacked levers:
+
+1. **Named-language system prompt** — `DEFAULT_SYSTEM_PROMPT_TEMPLATE` embeds the target language NAME (`... write the entire enhanced description in {language}.`). Empirically, "respond in the same language as the prompt" does NOT work — the PE never learned to introspect the user's language, it only honors an explicit language name.
+2. **Assistant-turn prefill** — a natural starter in the target language (`A `/`Une `/`Una `/`Ein `) is appended to the templated prompt, so the first sampled token already has its script locked. Drops the CJK-leak rate from ~75 % to ~0 %.
+3. **Repetition penalty 1.15 over a 128-token window** — the chinese-only fine-tune degenerates on non-CJK outputs. Without penalty: "noir, noir, noir, …" after a few tokens. With 32-token window: sentence-level loops every ~30 tokens. 128 tokens catches both failure modes.
+
+Priority resolution for the system prompt (highest wins): `pe_system_prompt` → `pe_language` → auto-detected from the prompt via Unicode scripts (CJK/kana/hangul/cyrillic/...) + Latin stopword heuristic (EN/FR/ES/IT/PT/DE).
 
 ## Configs (oracle — do not deviate)
 
