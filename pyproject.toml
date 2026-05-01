@@ -24,6 +24,7 @@ classifiers = [
 ]
 dependencies = [
     "ernie-image-mlx",
+    "pre-commit>=4.5.1",
 ]
 
 [project.optional-dependencies]
