@@ -81,3 +81,6 @@ markers = [
     "slow: tests that require model weights (deselect with '-m \"not slow\"')",
     "parity: PyTorch vs MLX numerical parity tests (require [parity] extra)",
 ]
+
+[tool.ty]
+# Strict-mode opt-in for PYTHON_QU003 (suzerain). See ADR-0003 for rationale.
