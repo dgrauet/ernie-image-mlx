@@ -1,0 +1,69 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # need full history for changelog generation
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate version coherence
+        env:
+          TAG: ${{ github.ref_name }}
+        run: python scripts/validate_versions.py "$TAG"
+
+      - name: Determine previous tag
+        id: prev
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          prev=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || echo "")
+          echo "prev_tag=${prev}" >> "$GITHUB_OUTPUT"
+          echo "Previous tag: ${prev:-<none>}"
+
+      - name: Generate changelog
+        env:
+          PREV_TAG: ${{ steps.prev.outputs.prev_tag }}
+        run: |
+          if [ -n "$PREV_TAG" ]; then
+            python scripts/generate_changelog.py "$PREV_TAG" > changelog.md
+          else
+            python scripts/generate_changelog.py > changelog.md
+          fi
+          echo "----- changelog.md -----"
+          cat changelog.md
+
+      - name: Detect prerelease
+        id: prerelease
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if [[ "$TAG" == *-* ]]; then
+            echo "flag=--prerelease" >> "$GITHUB_OUTPUT"
+          else
+            echo "flag=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          PRERELEASE_FLAG: ${{ steps.prerelease.outputs.flag }}
+        run: |
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --notes-file changelog.md \
+            $PRERELEASE_FLAG
