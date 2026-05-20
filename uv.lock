@@ -381,7 +381,7 @@ dependencies = [
 requires-dist = [
     { name = "huggingface-hub", specifier = ">=0.26.0" },
     { name = "mlx", specifier = ">=0.31.0" },
-    { name = "mlx-arsenal", specifier = ">=0.2.2" },
+    { name = "mlx-arsenal", specifier = ">=0.10.0" },
     { name = "mlx-lm", specifier = ">=0.31.0" },
     { name = "numpy", specifier = ">=1.26.0" },
     { name = "pillow", specifier = ">=10.0.0" },
@@ -723,15 +723,15 @@ wheels = [
 
 [[package]]
 name = "mlx-arsenal"
-version = "0.2.3"
+version = "0.10.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "mlx" },
     { name = "numpy" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/17/cf/01122db3441d8cd7d6c6414d8fb3ef44c563e7d7f84306aa6f5b66c5033e/mlx_arsenal-0.2.3.tar.gz", hash = "sha256:0c50c77bd8e746425eca6d7d8bed4f849857e9371871b5d1dc7c6e79e2bc198a", size = 35908, upload-time = "2026-04-20T12:01:28.355Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/24/cd/00e3aaadc99d8fd687c359680a6b34b7e0e1b43679fa960145390c9ac766/mlx_arsenal-0.10.0.tar.gz", hash = "sha256:95686768b07c27fa6036aaaa6576d681a74f95222460a2c8bd141d494bd98282", size = 92411, upload-time = "2026-05-20T21:35:37.812Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/82/7d/9eb8c5c2d95d9cd50cbcb8a165464781eb51a94f7ce3752ff95701121e09/mlx_arsenal-0.2.3-py3-none-any.whl", hash = "sha256:b6f23e5edac17800500112f800fe6a91b85387f1958809bf8b17b3fb252e015d", size = 32627, upload-time = "2026-04-20T12:01:27.075Z" },
+    { url = "https://files.pythonhosted.org/packages/c0/b9/1c4f0f0efb6af56f4a8e0b0c6f2730710c41df07d0101fee731b7f493f17/mlx_arsenal-0.10.0-py3-none-any.whl", hash = "sha256:d45a180d451f9f759bb415b097159d7e0e2f5eeafb2a2faa679a91eb036362f1", size = 76698, upload-time = "2026-05-20T21:35:36.311Z" },
 ]
 
 [[package]]
