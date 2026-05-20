@@ -1,6 +1,7 @@
 # ernie-image-mlx
 
 [![CI](https://github.com/dgrauet/ernie-image-mlx/actions/workflows/ci.yml/badge.svg)](https://github.com/dgrauet/ernie-image-mlx/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/dgrauet/ernie-image-mlx?sort=semver)](https://github.com/dgrauet/ernie-image-mlx/releases/latest)
 
 Pure [MLX](https://github.com/ml-explore/mlx) port of Baidu [ERNIE-Image](https://huggingface.co/baidu/ERNIE-Image) — an 8B single-stream Diffusion Transformer for text-to-image generation on Apple Silicon.
 
