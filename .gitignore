@@ -11,6 +11,7 @@ venv/
 
 # Local weights
 weights/
+/models/
 *.safetensors
 *.ckpt
 *.pt
@@ -25,3 +26,8 @@ weights/
 # Test outputs
 tests/**/outputs/
 tests/**/*.png
+!tests/golden/*.png
+
+# Local generation artifacts
+/*.png
+docs/benchmarks/

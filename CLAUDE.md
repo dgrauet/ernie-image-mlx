@@ -21,7 +21,7 @@ All 7 steps done. End-to-end inference produces clean images — sample in `docs
 5. **[done]** Step 3c — VAE `AutoencoderKLFlux2`. All modules ported; encoder max_abs 1.7e-6, decoder 6.7e-6.
 6. **[done]** Step 4 — `mlx-forge ernie-image` recipe. Six variants (fp16/int8/int4 × SFT/Turbo) convert cleanly and load end-to-end.
 7. **[done]** Step 5 — 23 tests green. 11 parity (rope, attention, ffn, AdaLN-continuous, full block, full model, ResnetBlock2D, VAE attention, VAE encoder, VAE decoder, VAE round-trip) + 12 smoke.
-8. **[done]** Step 6 — Pipeline end-to-end validated with `一只黑白相间的中华田园犬` on Turbo 8-step: clean dog image rendered in 45 s.
+8. **[done]** Step 6 — Pipeline end-to-end validated with `一只黑白相间的中华田园犬` on Turbo 8-step: clean dog image rendered in 45 s. Locked as an automated golden regression: `tests/smoke/test_golden_image.py` (marker `slow`) regenerates 512²/seed 42/no-PE on the Turbo int8 checkpoint and asserts PSNR ≥ 35 dB against `tests/golden/turbo_q8_dog_512_seed42.png`. Runs when `ERNIE_IMAGE_MLX_WEIGHTS_DIR` is set or the default q8 repo is in the HF cache; skipped otherwise (CI).
 9. **[done]** Step 7 — int4/int8 quantization via `mlx-forge convert --quantize --bits {4,8}`. Loader auto-swaps `nn.Linear` → `nn.QuantizedLinear` before `update`, class-predicate scoped to `layers.*` weights ≥ 256×256.
 
 ## Bug cascade that was burned through
