@@ -45,6 +45,10 @@ from ernie_image_core_mlx.model.vae import AutoencoderKLFlux2
 from ernie_image_core_mlx.prompt_enhancer import DEFAULT_PE_REPO_ID, PromptEnhancer
 from ernie_image_core_mlx.text_encoders.mistral3 import Mistral3TextEncoder
 
+# Converted MLX weights, not the upstream PyTorch repo — `from_pretrained`
+# loads split MLX safetensors, so a PT repo id would download 29 GB it can't use.
+DEFAULT_REPO_ID = "dgrauet/ernie-image-turbo-mlx-q8"
+
 
 @dataclass
 class PipelineOutput:
@@ -203,7 +207,7 @@ class ErnieImagePipeline:
     @classmethod
     def from_pretrained(
         cls,
-        repo_id: str = "baidu/ERNIE-Image-Turbo",
+        repo_id: str = DEFAULT_REPO_ID,
         *,
         variant: str | None = None,
         local_dir: str | None = None,

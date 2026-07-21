@@ -32,12 +32,12 @@ Requires macOS with Apple Silicon and Python 3.11+.
 ## Quick start
 
 ```python
-import os
-os.environ["ERNIE_IMAGE_MLX_WEIGHTS_DIR"] = "/path/to/ernie-image-turbo-mlx"  # see "Convert weights" below
-
 from ernie_image_core_mlx import ErnieImagePipeline
 
-pipe = ErnieImagePipeline.from_pretrained("baidu/ERNIE-Image-Turbo")
+# Downloads dgrauet/ernie-image-turbo-mlx-q8 (12 GB) on first use. Point at a
+# locally-converted checkpoint instead with local_dir=... or the
+# ERNIE_IMAGE_MLX_WEIGHTS_DIR env var (see "Convert weights" below).
+pipe = ErnieImagePipeline.from_pretrained()
 out = pipe(
     "a black and white chinese farm dog",  # any language works — PE expands short inputs
     height=512, width=512,                 # into rich Chinese visual descriptions
@@ -55,7 +55,7 @@ default (`dgrauet/ernie-image-pe-mlx-q4`, ~1.8 GB). Set `pe_repo_id=None` to
 skip loading it entirely, or pass `use_pe=False` to the call to keep it loaded
 but bypass expansion on a per-call basis.
 
-`from_pretrained` resolution order: explicit `local_dir` → `ERNIE_IMAGE_MLX_WEIGHTS_DIR` env var → `huggingface_hub.snapshot_download(repo_id)` (only useful once an MLX build is uploaded to HF).
+`from_pretrained` resolution order: explicit `local_dir` → `ERNIE_IMAGE_MLX_WEIGHTS_DIR` env var → `huggingface_hub.snapshot_download(repo_id)` (default `dgrauet/ernie-image-turbo-mlx-q8` — pass a converted MLX repo, not the upstream PyTorch one).
 
 ## CLI
 
@@ -121,6 +121,10 @@ uv run pytest tests/smoke
 
 # Full parity suite (needs the [parity] extra; ~5 s total — all random-weight)
 uv run pytest tests/parity -m parity
+
+# Golden-image e2e regression (needs the Turbo int8 weights — HF cache or
+# ERNIE_IMAGE_MLX_WEIGHTS_DIR; ~70 s, skipped automatically otherwise)
+uv run pytest tests/smoke/test_golden_image.py
 
 # Optional: install the pre-commit hook so ruff runs on every `git commit`.
 uv run pre-commit install
